@@ -401,7 +401,7 @@ rgw_zone_user: jacques.chirac
 rgw_zone_user_display_name: "Jacques Chirac"
 system_access_key: P9Eb6S8XNyo4dtZZUUMy
 system_secret_key: qqHCUtfdNnpHq3PZRHW5un9l0bEBM812Uhow0XfB
-rgw_pullendpoint: http://cluster0-rgw-000-hostname:8080
+rgw_pull_endpoint: http://cluster0-rgw-000-hostname:8080
 ```
 
 Here is an example of the file `host_vars/rgw-004` for the `rgw-004` entry in the `[rgws]` section for a secondary cluster.
@@ -420,7 +420,7 @@ rgw_zone_user: edward.lewis
 rgw_zone_user_display_name: "Edward Lewis"
 system_access_key: yu17wkvAx3B8Wyn08XoF
 system_secret_key: 5YZfaSUPqxSNIkZQQA3lBZ495hnIV6k2HAz710BY
-rgw_pullendpoint: http://cluster0-rgw-001-hostname:8080
+rgw_pull_endpoint: http://cluster0-rgw-001-hostname:8080
 ```
 
 6. Run the ceph-ansible playbook on your secondary cluster.
