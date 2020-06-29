@@ -4,8 +4,8 @@
 docker: true
 
 # DEFINE THE NUMBER OF VMS TO RUN
-mon_vms: 1
-osd_vms: 4
+mon_vms: 3
+osd_vms: 0
 mds_vms: 0
 rgw_vms: 0
 nfs_vms: 0
@@ -27,7 +27,7 @@ cluster_subnet: 192.168.40
 
 # MEMORY
 # set 1024 for CentOS
-memory: 512
+memory: 1024
 
 # Ethernet interface name
 # use eth1 for libvirt and ubuntu precise, enp0s8 for CentOS and ubuntu xenial

@@ -14,15 +14,11 @@ journal_size: 100
 copy_admin_key: true
 containerized_deployment: true
 # test-volume is created by tests/functional/lvm_setup.yml from /dev/sdb
-osd_scenario: lvm
-lvm_volumes:
-  - data: data-lv1
-    journal: /dev/sdc1
-    data_vg: test_group
-  - data: data-lv2
-    journal: journal1
-    data_vg: test_group
-    journal_vg: journals
+osd_scenario: collocated
+devices:
+  - /dev/sda
+  - /dev/sdb
+  - /dev/sdc
 os_tuning_params:
   - { name: fs.file-max, value: 26234859 }
 ceph_conf_overrides:
