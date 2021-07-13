@@ -102,8 +102,6 @@ ceph_directories_mode: "0755"
 ###########
 # INSTALL #
 ###########
-ceph_repository_type: dummy
-
 # ORIGIN SOURCE
 #
 # Choose between:
@@ -155,12 +153,6 @@ nfs_ganesha_stable_deb_repo: "{{ ceph_mirror }}/nfs-ganesha/deb-{{ nfs_ganesha_s
 # This version is supported on RHEL 8
 #
 ceph_rhcs_version: "{{ ceph_stable_rh_storage_version | default(5) }}"
-valid_ceph_repository_type:
-  - cdn
-  - iso
-ceph_rhcs_iso_path: "{{ ceph_stable_rh_storage_iso_path | default('') }}"
-ceph_rhcs_mount_path: "{{ ceph_stable_rh_storage_mount_path | default('/tmp/rh-storage-mount') }}"
-ceph_rhcs_repository_path: "{{ ceph_stable_rh_storage_repository_path | default('/tmp/rh-storage-repo') }}" # where to copy iso's content
 
 
 # REPOSITORY: UBUNTU CLOUD ARCHIVE
@@ -335,6 +327,7 @@ cephfs_pools:
 
 ## OSD options
 #
+lvmetad_disabled: false
 is_hci: false
 hci_safety_factor: 0.2
 non_hci_safety_factor: 0.7
@@ -541,7 +534,7 @@ os_tuning_params:
 # For Debian & Red Hat/CentOS installs set TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES
 # Set this to a byte value (e.g. 134217728)
 # A value of 0 will leave the package default.
-ceph_tcmalloc_max_total_thread_cache: 0
+ceph_tcmalloc_max_total_thread_cache: 134217728
 
 
 ##########
@@ -644,6 +637,8 @@ dashboard_enabled: True
 # then we will autogenerate a cert and keyfile
 dashboard_protocol: https
 dashboard_port: 8443
+# set this variable to the network you want the dashboard to listen on. (Default to public_network)
+dashboard_network: "{{ public_network }}"
 dashboard_admin_user: admin
 dashboard_admin_user_ro: false
 # This variable must be set with a strong custom password when dashboard_enabled is True
@@ -651,6 +646,7 @@ dashboard_admin_user_ro: false
 # We only need this for SSL (https) connections
 dashboard_crt: ''
 dashboard_key: ''
+dashboard_certificate_cn: ceph-dashboard
 dashboard_tls_external: false
 dashboard_grafana_api_no_ssl_verify: "{{ true if dashboard_protocol == 'https' and not grafana_crt and not grafana_key else false }}"
 dashboard_rgw_api_user_id: ceph-dashboard

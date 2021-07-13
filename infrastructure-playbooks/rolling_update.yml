@@ -9,9 +9,7 @@
 #
 # If you run a Ceph community version, you have to change the variable: ceph_stable_release to the new release
 #
-# If you run Red Hat Ceph Storage and are doing a **major** update (e.g: from 2 to 3), you have two options:
-#   - if you use a CDN, you have to change the ceph_rhcs_version to a newer one
-#   - if you use an ISO, you have to change the ceph_rhcs_iso_path to the directory containing the new Ceph version
+# If you run Red Hat Ceph Storage and are doing a **major** update (e.g: from 2 to 3), you have to change the ceph_rhcs_version to a newer one
 #
 
 - name: confirm whether user really meant to upgrade the cluster
@@ -127,6 +125,7 @@
   hosts: "{{ mon_group_name|default('mons') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     - name: upgrade ceph mon cluster
       block:
@@ -169,6 +168,16 @@
                   fail:
                     msg: "cluster is not in an acceptable state!"
               when: (check_cluster_health.stdout | from_json).status == 'HEALTH_ERR'
+
+            - name: get the ceph quorum status
+              command: "{{ container_exec_cmd }} ceph --cluster {{ cluster }} quorum_status -f json"
+              register: check_quorum_status
+              delegate_to: "{{ mon_host }}"
+
+            - name: fail if the cluster quorum isn't in an acceptable state
+              fail:
+                msg: "cluster quorum is not in an acceptable state!"
+              when: (check_quorum_status.stdout | from_json).quorum | length != groups[mon_group_name] | length
           when: inventory_hostname == groups[mon_group_name] | first
 
         - name: ensure /var/lib/ceph/bootstrap-rbd-mirror is present
@@ -288,6 +297,7 @@
 - name: reset mon_host
   hosts: "{{ mon_group_name|default('mons') }}"
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -305,6 +315,7 @@
   hosts: "{{ mon_group_name|default('mons') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     - name: upgrade mgrs when no mgr group explicitly defined in inventory
       when: groups.get(mgr_group_name, []) | length == 0
@@ -339,6 +350,7 @@
   hosts: "{{ mgr_group_name|default('mgrs') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     # The following task has a failed_when: false
     # to handle the scenario where no mgr existed before the upgrade
@@ -372,6 +384,7 @@
 - name: set osd flags
   hosts: "{{ mon_group_name | default('mons') }}[0]"
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -399,6 +412,7 @@
   hosts: "{{ osd_group_name|default('osds') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -472,6 +486,7 @@
 - name: complete osd upgrade
   hosts: "{{ mon_group_name|default('mons') }}[0]"
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -494,6 +509,7 @@
 - name: upgrade ceph mdss cluster, deactivate all rank > 0
   hosts: "{{ mon_group_name | default('mons') }}[0]"
   become: true
+  gather_facts: false
   tasks:
     - name: deactivate all mds rank > 0
       when: groups.get(mds_group_name, []) | length > 0
@@ -594,6 +610,7 @@
     upgrade_ceph_packages: True
   hosts: active_mdss
   become: true
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -639,6 +656,7 @@
     upgrade_ceph_packages: True
   hosts: standby_mdss
   become: True
+  gather_facts: false
 
   tasks:
     - import_role:
@@ -687,6 +705,7 @@
   hosts: "{{ rgw_group_name|default('rgws') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
 
     - import_role:
@@ -730,6 +749,7 @@
   hosts: "{{ rbdmirror_group_name|default('rbdmirrors') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     - name: stop ceph rbd mirror
       systemd:
@@ -762,6 +782,7 @@
   hosts: "{{ nfs_group_name|default('nfss') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     # failed_when: false is here so that if we upgrade
     # from a version of ceph that does not have nfs-ganesha
@@ -811,6 +832,7 @@
     - "{{ iscsi_gw_group_name|default('iscsigws') }}"
   serial: 1
   become: True
+  gather_facts: false
   tasks:
     # failed_when: false is here so that if we upgrade
     # from a version of ceph that does not have iscsi gws
@@ -851,6 +873,7 @@
   hosts: "{{ client_group_name|default('clients') }}"
   serial: "{{ client_update_batch | default(20) }}"
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -886,8 +909,14 @@
       systemd:
         name: "{{ 'ceph-crash@' + ansible_facts['hostname'] if containerized_deployment | bool else 'ceph-crash.service' }}"
         state: stopped
+
+    # it needs to be done in a separate task otherwise the stop just before doesn't work.
+    - name: mask and disable the ceph-crash service
+      systemd:
+        name: "{{ 'ceph-crash@' + ansible_facts['hostname'] if containerized_deployment | bool else 'ceph-crash.service' }}"
         enabled: no
         masked: yes
+
     - import_role:
         name: ceph-defaults
     - import_role:
@@ -901,6 +930,7 @@
 - name: complete upgrade
   hosts: "{{ mon_group_name | default('mons') }}"
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults
@@ -1013,9 +1043,51 @@
         - import_role:
             name: ceph-dashboard
 
+- name: switch any existing crush buckets to straw2
+  hosts: "{{ mon_group_name | default('mons') }}[0]"
+  become: true
+  any_errors_fatal: true
+  gather_facts: false
+  tasks:
+    - import_role:
+        name: ceph-defaults
+
+    - import_role:
+        name: ceph-facts
+        tasks_from: container_binary.yml
+
+    - name: set_fact ceph_cmd
+      set_fact:
+        ceph_cmd: "{{ container_binary + ' run --rm --net=host -v /etc/ceph:/etc/ceph:z --entrypoint=ceph ' + ceph_docker_registry + '/' + ceph_docker_image + ':' + ceph_docker_image_tag if containerized_deployment | bool else 'ceph' }}"
+
+    - name: backup the crushmap
+      command: "{{ ceph_cmd }} --cluster {{ cluster }} osd getcrushmap -o /etc/ceph/{{ cluster }}-crushmap"
+      changed_when: false
+
+    - block:
+        - name: switch crush buckets to straw2
+          command: "{{ ceph_cmd }} --cluster {{ cluster }} osd crush set-all-straw-buckets-to-straw2"
+          changed_when: false
+      rescue:
+        - name: restore the crushmap
+          command: "{{ ceph_cmd }} --cluster {{ cluster }} osd setcrushmap -i /etc/ceph/{{ cluster }}-crushmap"
+          changed_when: false
+
+        - name: inform that the switch to straw2 buckets failed
+          fail:
+            msg: >
+              "An attempt to switch to straw2 bucket was made but failed.
+               Check the cluster status."
+
+    - name: remove crushmap backup
+      file:
+        path: /etc/ceph/{{ cluster }}-crushmap
+        state: absent
+
 - name: show ceph status
   hosts: "{{ mon_group_name|default('mons') }}"
   become: True
+  gather_facts: false
   tasks:
     - import_role:
         name: ceph-defaults

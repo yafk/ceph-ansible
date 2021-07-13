@@ -45,6 +45,7 @@
     - "{{ iscsi_gw_group_name|default('iscsigws') }}"
     - "{{ monitoring_group_name|default('monitoring') }}"
   become: true
+  any_errors_fatal: True
   gather_facts: false
   vars:
     delegate_facts_host: true
@@ -282,6 +283,13 @@
           changed_when: false
           delegate_to: '{{ groups[mon_group_name][0] }}'
 
+    - name: enable the osd memory autotune for hci environment
+      command: "{{ ceph_cmd }} config set osd osd_memory_target_autotune true"
+      changed_when: false
+      run_once: true
+      delegate_to: '{{ groups[mon_group_name][0] }}'
+      when: is_hci | bool
+
     - name: manage nodes with cephadm
       command: "{{ ceph_cmd }} orch host add {{ ansible_facts['hostname'] }} {{ ansible_facts['default_ipv4']['address'] }} {{ group_names | join(' ') }}"
       changed_when: false
@@ -346,6 +354,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -389,10 +398,11 @@
         CEPHADM_IMAGE: '{{ ceph_docker_registry }}/{{ ceph_docker_image }}:{{ ceph_docker_image_tag }}'
 
 - name: adopt ceph mgr daemons
-  hosts: "{{ mgr_group_name|default('mgrs') }}"
+  hosts: "{{ groups[mgr_group_name] | default(groups[mon_group_name]) }}"
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -428,6 +438,7 @@
   hosts: "{{ osd_group_name|default('osds') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -451,6 +462,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -538,6 +550,7 @@
   hosts: "{{ osd_group_name|default('osds') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -560,6 +573,7 @@
   hosts: "{{ mds_group_name|default('mdss') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -577,6 +591,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -622,9 +637,14 @@
   hosts: "{{ rgw_group_name|default('rgws') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
+
+    - import_role:
+        name: ceph-facts
+        tasks_from: set_radosgw_address.yml
 
     - name: for non multisite setup
       when: not rgw_multisite | bool
@@ -669,10 +689,20 @@
           environment:
             CEPHADM_IMAGE: '{{ ceph_docker_registry }}/{{ ceph_docker_image }}:{{ ceph_docker_image_tag }}'
 
-    - name: update the placement of radosgw hosts
-      command: "{{ cephadm_cmd }} shell --fsid {{ fsid }} -- ceph --cluster {{ cluster }} orch apply rgw {{ cluster }} {{ rgw_realm | default('default') }} {{ rgw_zone | default('default') }} --placement='count-per-host:{{ radosgw_num_instances }} label:{{ rgw_group_name }}' --port={{ radosgw_frontend_port }} {{ '--ssl' if radosgw_frontend_ssl_certificate else '' }}"
-      run_once: true
+        - name: update the placement of radosgw hosts
+          command: "{{ cephadm_cmd }} shell --fsid {{ fsid }} -- ceph --cluster {{ cluster }} orch apply rgw {{ cluster }} {{ rgw_realm | default('default') }} {{ rgw_zone | default('default') }} --placement='count-per-host:{{ radosgw_num_instances }} label:{{ rgw_group_name }}' --port={{ radosgw_frontend_port }} {{ '--ssl' if radosgw_frontend_ssl_certificate else '' }}"
+          run_once: true
+          changed_when: false
+          delegate_to: "{{ groups[mon_group_name][0] }}"
+          environment:
+            CEPHADM_IMAGE: '{{ ceph_docker_registry }}/{{ ceph_docker_image }}:{{ ceph_docker_image_tag }}'
+
+    - name: update the placement of radosgw multisite hosts
+      command: "{{ cephadm_cmd }} shell --fsid {{ fsid }} -- ceph --cluster {{ cluster }} orch apply rgw {{ item.host }}.{{ item.rgw_realm }}.{{ item.rgw_zone }}.{{ item.radosgw_frontend_port }} --realm={{ item.rgw_realm }} --zone={{ item.rgw_zone }} --port={{ item.radosgw_frontend_port }} --placement={{ item.host }}"
       changed_when: false
+      with_items: "{{ rgw_instances_all }}"
+      when: rgw_multisite | bool
+      run_once: true
       delegate_to: "{{ groups[mon_group_name][0] }}"
       environment:
         CEPHADM_IMAGE: '{{ ceph_docker_registry }}/{{ ceph_docker_image }}:{{ ceph_docker_image_tag }}'
@@ -682,6 +712,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -740,6 +771,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -852,6 +884,7 @@
       ceph_pool:
         name: "{{ nfs_ganesha_export_pool_name | default('nfs-ganesha') }}"
         cluster: "{{ cluster }}"
+        application: nfs
       delegate_to: "{{ groups[mon_group_name][0] }}"
       run_once: true
       environment:
@@ -878,6 +911,7 @@
   hosts: "{{ rbdmirror_group_name|default('rbdmirrors') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -895,6 +929,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -935,6 +970,7 @@
   hosts: "{{ iscsi_gw_group_name|default('iscsigws') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -952,6 +988,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -997,17 +1034,17 @@
     - "{{ rbdmirror_group_name|default('rbdmirrors') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
 
     - name: stop and disable ceph-crash systemd service
       service:
-        name: ceph-crash
+        name: "{{ 'ceph-crash@' + ansible_facts['hostname'] if containerized_deployment | bool else 'ceph-crash.service' }}"
         state: stopped
         enabled: false
       failed_when: false
-      when: not containerized_deployment | bool
 
     - name: update the placement of ceph-crash hosts
       command: "{{ cephadm_cmd }} shell --fsid {{ fsid }} -- ceph --cluster {{ cluster }} orch apply crash --placement='label:ceph'"
@@ -1022,6 +1059,7 @@
   serial: 1
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -1188,6 +1226,7 @@
     - "{{ monitoring_group_name|default('monitoring') }}"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -1220,6 +1259,7 @@
   hosts: "{{ mon_group_name|default('mons') }}[0]"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
@@ -1230,8 +1270,16 @@
       environment:
         CEPHADM_IMAGE: '{{ ceph_docker_registry }}/{{ ceph_docker_image }}:{{ ceph_docker_image_tag }}'
 
+    - name: set_fact mgr_placement
+      set_fact:
+        mgr_placement_count: "{{ groups.get(mgr_group_name, []) | length if groups.get(mgr_group_name, []) | length > 0 else groups.get(mon_group_name, []) | length }}"
+
+    - name: set_fact mgr_placement_label
+      set_fact:
+        mgr_placement_label: "{{ mgr_group_name if groups.get(mgr_group_name, []) | length > 0 else mon_group_name }}"
+
     - name: update the placement of manager hosts
-      command: "{{ cephadm_cmd }} shell --fsid {{ fsid }} -- ceph --cluster {{ cluster }} orch apply mgr --placement='{{ groups.get(mgr_group_name, []) | length }} label:{{ mgr_group_name }}'"
+      command: "{{ cephadm_cmd }} shell --fsid {{ fsid }} -- ceph --cluster {{ cluster }} orch apply mgr --placement='{{ mgr_placement_count }} label:{{ mgr_placement_label }}'"
       changed_when: false
       environment:
         CEPHADM_IMAGE: '{{ ceph_docker_registry }}/{{ ceph_docker_image }}:{{ ceph_docker_image_tag }}'
@@ -1261,6 +1309,7 @@
   hosts: "{{ mon_group_name|default('mons') }}[0]"
   become: true
   gather_facts: false
+  any_errors_fatal: True
   tasks:
     - import_role:
         name: ceph-defaults
